@@ -4,12 +4,28 @@ import json
 import os
 import sys
 
-version = "v0.3.1"
+try:
+    from sty import fg, bg, ef, rs, RgbFg, Style
+except ModuleNotFoundError:
+    print("TEna requires a third-party module (sty)")
+    print("See https://pypi.org/project/sty/")
+    print("Exiting...")
+    sys.exit()
+
+version = "devbranch"
 #versiondesc = ""
 fileprotocol = 3
 jsontemplate = json.loads('{"protocol": %d, "tasks": []}' %(fileprotocol))
 tasksfilename = "tasks.json"
 maxtask_id = 1000
+
+# custom colours and styling provided by sty
+fg.taskdue = Style(fg.li_yellow)
+fg.taskoverdue = Style(RgbFg(255, 165, 0)) # orange
+fg.taskcomplete = Style(fg.green)
+fg.taskdeferred = Style(fg.grey)
+fg.taskblacklisted = Style(fg.grey, ef.italic)
+fg.taskdeleted = Style(fg.grey, ef.italic)
 
 def readfile(filename):
     with open(filename, "r") as file:
@@ -20,7 +36,7 @@ def writefile(filename, jsontowrite):
     with open(filename, "w") as file:
         json.dump(jsontowrite, file)
 
-def friendlyprint(task):
+def verboseprint(task):
     print("%d: %s (%s)" %(task["task_id"], task["task_name"], task["task_category"]))
     if task["task_assigned"] != None:
         print("  assigned ISO %d %d, raw %s" %(task["task_assigned"]["year"], task["task_assigned"]["week"], task["task_assigned"]["raw_date"]))
@@ -32,7 +48,12 @@ def friendlyprint(task):
             currentiso = date.fromisocalendar(currentisoyear, currentisoweek, 1)
             deadlinedelta = (dueiso - assignediso).days // 7
             remainingdelta = (dueiso - currentiso).days // 7
-            print("  deadline %d, remaining %d" %(deadlinedelta, remainingdelta))
+            if remainingdelta == 0:
+                print(fg.taskdue, end="")
+                print("  deadline %d, remaining %d" %(deadlinedelta, remainingdelta))
+                print(rs.all, end="")
+            else:
+                print("  deadline %d, remaining %d" %(deadlinedelta, remainingdelta))
         else:
             assignediso = date.fromisocalendar(task["task_assigned"]["year"], task["task_assigned"]["week"], 1)
             dueiso = date.fromisocalendar(task["task_due"]["year"], task["task_due"]["week"], 1)
@@ -65,7 +86,7 @@ if jsoncontent["protocol"] != fileprotocol:
     sys.exit()
 print("Found %d tasks" %(len(jsoncontent["tasks"])))
 for task in jsoncontent["tasks"]:
-    friendlyprint(task)
+    verboseprint(task)
     if task["task_id"] > maxtask_id:
         maxtask_id = task["task_id"]
 
@@ -79,6 +100,13 @@ while True:
 
     if userinput == "":
         pass
+    elif userinput == "list" or userinput == "listtasks":
+        pass
+    elif userinput == "listall":
+        pass
+    elif userinput == "listverbose":
+        for task in jsoncontent["tasks"]:
+            verboseprint(task)
     elif userinput == "addtask" or userinput == "newtask":
         newtask_id = maxtask_id + 1
         print("New task will be assigned ID %d" %(newtask_id))
@@ -122,7 +150,7 @@ while True:
         newtask = {"task_id": newtask_id, "task_name": newtask_name, "task_category": newtask_category, "task_assigned": newtask_assigned, "task_due": newtask_due, "task_complete": newtask_complete}
         jsoncontent["tasks"].append(newtask)
         print("New task added!")
-        friendlyprint(newtask)
+        verboseprint(newtask)
         unsaved = True
         maxtask_id += 1
     elif userinput == "edittask":
@@ -135,7 +163,7 @@ while True:
             for task in jsoncontent["tasks"]:
                 if task_id == task["task_id"]:
                     taskfound = True
-                    friendlyprint(task)
+                    verboseprint(task)
                     task_name = input("Rename task [%s]: " %(task["task_name"]))
                     if task_name != "":
                         print("Renaming...")
@@ -189,7 +217,7 @@ while True:
                     else:
                         task["task_complete"] = None
                     print("Task edited!")
-                    friendlyprint(task)
+                    verboseprint(task)
                     unsaved = True
                     break
             if not taskfound:
@@ -204,7 +232,7 @@ while True:
             for task in jsoncontent["tasks"]:
                 if task_id == task["task_id"]:
                     taskfound = True
-                    friendlyprint(task)
+                    verboseprint(task)
                     inputgate = True
                     while inputgate:
                         userinput = input("Are you sure? (yes/no) ").lower()
@@ -217,7 +245,7 @@ while True:
                             task["task_complete"] = None
                             print("Task deleted!")
                             # vv -- remove this later
-                            friendlyprint(task)
+                            verboseprint(task)
                             # ^^ --
                             unsaved = True
                             inputgate = False
