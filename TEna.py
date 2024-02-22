@@ -23,6 +23,7 @@ maxtask_id = 1000
 fg.taskdue = Style(fg.li_yellow)
 fg.taskoverdue = Style(RgbFg(255, 165, 0)) # orange
 fg.taskcomplete = Style(fg.green)
+fg.taskpreviouslycomplete = Style(fg.green)
 fg.taskdeferred = Style(fg.grey)
 fg.taskblacklisted = Style(fg.grey, ef.italic)
 fg.taskdeleted = Style(fg.grey, ef.italic)
@@ -35,6 +36,46 @@ def readfile(filename):
 def writefile(filename, jsontowrite):
     with open(filename, "w") as file:
         json.dump(jsontowrite, file)
+
+def friendlyprint(task, printall):
+    # first, calculate flags
+    dueflag = False
+    overdueflag = False
+    if task["task_due"] != None:
+        assignediso = date.fromisocalendar(task["task_assigned"]["year"], task["task_assigned"]["week"], 1)
+        dueiso = date.fromisocalendar(task["task_due"]["year"], task["task_due"]["week"], 1)
+        deadlinedelta = (dueiso - assignediso).days // 7
+        if task["task_complete"] == None:
+            currentiso = date.fromisocalendar(currentisoyear, currentisoweek, 1)
+            remainingdelta = (dueiso - currentiso).days // 7
+            if remainingdelta == 0:
+                dueflag = True
+            elif remainingdelta < 0:
+                overdueflag = True
+        else:
+            completeiso = date.fromisocalendar(task["task_complete"]["year"], task["task_complete"]["week"], 1)
+            remainingdelta = (dueiso - completeiso).days // 7
+
+    # print according to set flags
+    if dueflag:
+        print(fg.taskdue, end="")
+        print("%d: %s" %(task["task_id"], task["task_name"]))
+        print(rs.all, end="")
+    elif overdueflag:
+        print(fg.taskoverdue, end="")
+        print("%d: %s" %(task["task_id"], task["task_name"]))
+        print(rs.all, end="")
+    elif task["task_category"] == "normal" and task["task_complete"] != None:
+        if task["task_complete"]["week"] == currentisoweek and task["task_complete"]["year"] == currentisoyear:
+            print(fg.taskcomplete, end="")
+            print("%d: %s" %(task["task_id"], task["task_name"]))
+            print(rs.all, end="")
+        elif printall:
+            print(fg.taskpreviouslycomplete, end="")
+            print("%d: %s" %(task["task_id"], task["task_name"]))
+            print(rs.all, end="")
+    else:
+        print("%d: %s" %(task["task_id"], task["task_name"]))
 
 def verboseprint(task):
     print("%d: %s (%s)" %(task["task_id"], task["task_name"], task["task_category"]))
@@ -101,9 +142,11 @@ while True:
     if userinput == "":
         pass
     elif userinput == "list" or userinput == "listtasks":
-        pass
+        for task in jsoncontent["tasks"]:
+            friendlyprint(task, False)
     elif userinput == "listall":
-        pass
+        for task in jsoncontent["tasks"]:
+            friendlyprint(task, True)
     elif userinput == "listverbose":
         for task in jsoncontent["tasks"]:
             verboseprint(task)
