@@ -24,7 +24,7 @@ fg.taskdue = Style(fg.li_yellow)
 fg.taskoverdue = Style(RgbFg(255, 165, 0)) # orange
 fg.taskcomplete = Style(fg.green)
 fg.taskpreviouslycomplete = Style(fg.green)
-fg.taskdeferred = Style(fg.grey)
+#fg.taskdeferred = Style(fg.grey)
 fg.taskblacklisted = Style(fg.grey, ef.italic)
 fg.taskdeleted = Style(fg.grey, ef.italic)
 
@@ -60,48 +60,69 @@ def friendlyprint(task, printall):
     if dueflag:
         print(fg.taskdue, end="")
         print("%d: %s" %(task["task_id"], task["task_name"]))
+        print("  normal task, due (%d/%d weeks left)" %(remainingdelta, deadlinedelta))
         print(rs.all, end="")
     elif overdueflag:
         print(fg.taskoverdue, end="")
         print("%d: %s" %(task["task_id"], task["task_name"]))
+        print("  normal task, overdue (%d/%d weeks left)" %(remainingdelta, deadlinedelta))
         print(rs.all, end="")
-    elif task["task_category"] == "normal" and task["task_complete"] != None:
+    elif (task["task_category"] == "normal" and task["task_complete"] != None) \
+         or (task["task_category"] == "deferred" and task["task_complete"] != None):
         if task["task_complete"]["week"] == currentisoweek and task["task_complete"]["year"] == currentisoyear:
             print(fg.taskcomplete, end="")
             print("%d: %s" %(task["task_id"], task["task_name"]))
+            print("  normal task, completed")
             print(rs.all, end="")
         elif printall:
             print(fg.taskpreviouslycomplete, end="")
             print("%d: %s" %(task["task_id"], task["task_name"]))
+            print("  normal task, completed")
             print(rs.all, end="")
-    else:
+    elif task["task_category"] == "normal":
         print("%d: %s" %(task["task_id"], task["task_name"]))
+        print("  normal task (%d/%d weeks left)" %(remainingdelta, deadlinedelta))
+    elif task["task_category"] == "deferred":
+        print("%d: %s" %(task["task_id"], task["task_name"]))
+        print("  deferred task")
+    elif task["task_category"] == "blacklisted":
+        if task["task_assigned"]["week"] == currentisoweek and task["task_assigned"]["year"] == currentisoyear:
+            print(fg.taskblacklisted, end="")
+            print("%d: %s" %(task["task_id"], task["task_name"]))
+            print("  blacklisted task")
+            print(rs.all, end="")
+        elif printall:
+            print(fg.taskblacklisted, end="")
+            print("%d: %s" %(task["task_id"], task["task_name"]))
+            print("  blacklisted task")
+            print(rs.all, end="")
 
 def verboseprint(task):
+    # first, calculate flags
+    dueflag = False
+    overdueflag = False
+    if task["task_due"] != None:
+        assignediso = date.fromisocalendar(task["task_assigned"]["year"], task["task_assigned"]["week"], 1)
+        dueiso = date.fromisocalendar(task["task_due"]["year"], task["task_due"]["week"], 1)
+        deadlinedelta = (dueiso - assignediso).days // 7
+        if task["task_complete"] == None:
+            currentiso = date.fromisocalendar(currentisoyear, currentisoweek, 1)
+            remainingdelta = (dueiso - currentiso).days // 7
+            if remainingdelta == 0:
+                dueflag = True
+            elif remainingdelta < 0:
+                overdueflag = True
+        else:
+            completeiso = date.fromisocalendar(task["task_complete"]["year"], task["task_complete"]["week"], 1)
+            remainingdelta = (dueiso - completeiso).days // 7
+
+    ####
     print("%d: %s (%s)" %(task["task_id"], task["task_name"], task["task_category"]))
     if task["task_assigned"] != None:
         print("  assigned ISO %d %d, raw %s" %(task["task_assigned"]["year"], task["task_assigned"]["week"], task["task_assigned"]["raw_date"]))
     if task["task_due"] != None:
         print("  due ISO %d %d" %(task["task_due"]["year"], task["task_due"]["week"]))
-        if task["task_complete"] == None:
-            assignediso = date.fromisocalendar(task["task_assigned"]["year"], task["task_assigned"]["week"], 1)
-            dueiso = date.fromisocalendar(task["task_due"]["year"], task["task_due"]["week"], 1)
-            currentiso = date.fromisocalendar(currentisoyear, currentisoweek, 1)
-            deadlinedelta = (dueiso - assignediso).days // 7
-            remainingdelta = (dueiso - currentiso).days // 7
-            if remainingdelta == 0:
-                print(fg.taskdue, end="")
-                print("  deadline %d, remaining %d" %(deadlinedelta, remainingdelta))
-                print(rs.all, end="")
-            else:
-                print("  deadline %d, remaining %d" %(deadlinedelta, remainingdelta))
-        else:
-            assignediso = date.fromisocalendar(task["task_assigned"]["year"], task["task_assigned"]["week"], 1)
-            dueiso = date.fromisocalendar(task["task_due"]["year"], task["task_due"]["week"], 1)
-            completeiso = date.fromisocalendar(task["task_complete"]["year"], task["task_complete"]["week"], 1)
-            deadlinedelta = (dueiso - assignediso).days // 7
-            remainingdelta = (dueiso - completeiso).days // 7
-            print("  deadline %d, remaining %d" %(deadlinedelta, remainingdelta))
+        print("  deadline %d, remaining %d" %(deadlinedelta, remainingdelta))
     if task["task_complete"] != None:
         print("  completed ISO %d %d, raw %s" %(task["task_complete"]["year"], task["task_complete"]["week"], task["task_complete"]["raw_date"]))
 
