@@ -12,7 +12,7 @@ except ModuleNotFoundError:
     print("Exiting...")
     sys.exit()
 
-version = "devbranch"
+version = "v0.3.2"
 #versiondesc = ""
 fileprotocol = 3
 jsontemplate = json.loads('{"protocol": %d, "tasks": []}' %(fileprotocol))
@@ -23,7 +23,7 @@ maxtask_id = 1000
 fg.taskdue = Style(fg.li_yellow)
 fg.taskoverdue = Style(RgbFg(255, 165, 0)) # orange
 fg.taskcomplete = Style(fg.green)
-fg.taskpreviouslycomplete = Style(fg.green)
+#fg.taskpreviouslycomplete = Style(fg.green)
 #fg.taskdeferred = Style(fg.grey)
 fg.taskblacklisted = Style(fg.grey, ef.italic)
 fg.taskdeleted = Style(fg.grey, ef.italic)
@@ -41,6 +41,7 @@ def friendlyprint(task, printall):
     # first, calculate flags
     dueflag = False
     overdueflag = False
+    hideflag = False
     if task["task_due"] != None:
         assignediso = date.fromisocalendar(task["task_assigned"]["year"], task["task_assigned"]["week"], 1)
         dueiso = date.fromisocalendar(task["task_due"]["year"], task["task_due"]["week"], 1)
@@ -55,47 +56,42 @@ def friendlyprint(task, printall):
         else:
             completeiso = date.fromisocalendar(task["task_complete"]["year"], task["task_complete"]["week"], 1)
             remainingdelta = (dueiso - completeiso).days // 7
+            if not (task["task_complete"]["week"] == currentisoweek and task["task_complete"]["year"] == currentisoyear) \
+               and not printall:
+                hideflag = True
+    elif task["task_category"] == "deferred" and task["task_complete"] != None:
+        if not (task["task_complete"]["week"] == currentisoweek and task["task_complete"]["year"] == currentisoyear) \
+           and not printall:
+            hideflag = True
+    elif task["task_category"] == "blacklisted":
+        if not (task["task_assigned"]["week"] == currentisoweek and task["task_assigned"]["year"] == currentisoyear) \
+           and not printall:
+            hideflag = True
 
-    # print according to set flags
+    # set styling according to flags
+    duestatus = ""
+    duecount = ""
     if dueflag:
         print(fg.taskdue, end="")
-        print("%d: %s" %(task["task_id"], task["task_name"]))
-        print("  normal task, due (%d/%d weeks left)" %(remainingdelta, deadlinedelta))
-        print(rs.all, end="")
+        duestatus = ", due"
     elif overdueflag:
         print(fg.taskoverdue, end="")
-        print("%d: %s" %(task["task_id"], task["task_name"]))
-        print("  normal task, overdue (%d/%d weeks left)" %(remainingdelta, deadlinedelta))
-        print(rs.all, end="")
-    elif (task["task_category"] == "normal" and task["task_complete"] != None) \
-         or (task["task_category"] == "deferred" and task["task_complete"] != None):
-        if task["task_complete"]["week"] == currentisoweek and task["task_complete"]["year"] == currentisoyear:
-            print(fg.taskcomplete, end="")
-            print("%d: %s" %(task["task_id"], task["task_name"]))
-            print("  normal task, completed")
-            print(rs.all, end="")
-        elif printall:
-            print(fg.taskpreviouslycomplete, end="")
-            print("%d: %s" %(task["task_id"], task["task_name"]))
-            print("  normal task, completed")
-            print(rs.all, end="")
-    elif task["task_category"] == "normal":
-        print("%d: %s" %(task["task_id"], task["task_name"]))
-        print("  normal task (%d/%d weeks left)" %(remainingdelta, deadlinedelta))
-    elif task["task_category"] == "deferred":
-        print("%d: %s" %(task["task_id"], task["task_name"]))
-        print("  deferred task")
+        duestatus = ", overdue"
+    elif task["task_complete"] != None:
+        print(fg.taskcomplete, end="")
+        duestatus = ", completed"
     elif task["task_category"] == "blacklisted":
-        if task["task_assigned"]["week"] == currentisoweek and task["task_assigned"]["year"] == currentisoyear:
-            print(fg.taskblacklisted, end="")
-            print("%d: %s" %(task["task_id"], task["task_name"]))
-            print("  blacklisted task")
-            print(rs.all, end="")
-        elif printall:
-            print(fg.taskblacklisted, end="")
-            print("%d: %s" %(task["task_id"], task["task_name"]))
-            print("  blacklisted task")
-            print(rs.all, end="")
+        print(fg.taskblacklisted, end="")
+
+    # print task if not hidden
+    if task["task_category"] != "deleted" and not hideflag:
+        print("%d: %s" %(task["task_id"], task["task_name"]))
+        if task["task_category"] == "normal" and task["task_complete"] == None:
+            duecount = " (%d/%d weeks left)" %(remainingdelta, deadlinedelta)
+        print("  %s task%s%s" %(task["task_category"], duestatus, duecount))
+
+    # reset styling
+    print(rs.all, end="")
 
 def verboseprint(task):
     # first, calculate flags
@@ -116,7 +112,17 @@ def verboseprint(task):
             completeiso = date.fromisocalendar(task["task_complete"]["year"], task["task_complete"]["week"], 1)
             remainingdelta = (dueiso - completeiso).days // 7
 
-    ####
+    # set styling according to flags
+    if dueflag:
+        print(fg.taskdue, end="")
+    elif overdueflag:
+        print(fg.taskoverdue, end="")
+    elif task["task_complete"] != None:
+        print(fg.taskcomplete, end="")
+    elif task["task_category"] == "blacklisted":
+        print(fg.taskblacklisted, end="")
+
+    # print task
     print("%d: %s (%s)" %(task["task_id"], task["task_name"], task["task_category"]))
     if task["task_assigned"] != None:
         print("  assigned ISO %d %d, raw %s" %(task["task_assigned"]["year"], task["task_assigned"]["week"], task["task_assigned"]["raw_date"]))
@@ -125,6 +131,9 @@ def verboseprint(task):
         print("  deadline %d, remaining %d" %(deadlinedelta, remainingdelta))
     if task["task_complete"] != None:
         print("  completed ISO %d %d, raw %s" %(task["task_complete"]["year"], task["task_complete"]["week"], task["task_complete"]["raw_date"]))
+
+    # reset styling
+    print(rs.all, end="")
 
 os.system("clear")
 print("Running TEna %s (using file protocol %d)..." %(version, fileprotocol))
@@ -146,9 +155,9 @@ print("File protocol %d" %(jsoncontent["protocol"]))
 if jsoncontent["protocol"] != fileprotocol:
     print("Expected file protocol %d, got %d! Exiting..." %(fileprotocol, jsoncontent["protocol"]))
     sys.exit()
-print("Found %d tasks" %(len(jsoncontent["tasks"])))
+#print("Found %d tasks" %(len(jsoncontent["tasks"])))
 for task in jsoncontent["tasks"]:
-    verboseprint(task)
+    friendlyprint(task, False)
     if task["task_id"] > maxtask_id:
         maxtask_id = task["task_id"]
 
